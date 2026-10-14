@@ -4,7 +4,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_preferences.dart';
 import 'usage_service.dart';
 
-/// Represents a warning tier that can fire for a monitored app.
 enum WarningTier { seventy, eighty, ninety, limitReached }
 
 extension WarningTierThreshold on WarningTier {
@@ -35,34 +34,48 @@ extension WarningTierThreshold on WarningTier {
   }
 }
 
-/// A warning event fired for a specific app crossing a specific tier.
 class UsageWarning {
   final MonitoredApp app;
   final WarningTier tier;
   final int usedMinutes;
 
-  UsageWarning({
-    required this.app,
-    required this.tier,
-    required this.usedMinutes,
-  });
+  UsageWarning({required this.app, required this.tier, required this.usedMinutes});
+
+  String get message {
+    final n = app.displayName;
+    switch (tier) {
+      case WarningTier.seventy:
+        return '$n: ${usedMinutes}m of ${app.dailyLimitMinutes}m used (70%). '
+            'Take a one-minute break?';
+      case WarningTier.eighty:
+        return '$n: 80% of your daily limit used. Try a one-minute activity.';
+      case WarningTier.ninety:
+        return '$n: almost there, 90% used! A Mindful Minute can help.';
+      case WarningTier.limitReached:
+        return '$n: daily limit reached. Time for your Mindful Minute!';
+    }
+  }
 }
 
-/// Polls usage stats periodically and determines which warnings
-/// should fire for the user's monitored apps, avoiding repeats
-/// within the same day.
+/// Runs inside the BACKGROUND SERVICE isolate (see background_service.dart).
 class MonitoringService {
+  static const Duration inactivityReset = Duration(minutes: 30);
+
   Timer? _pollTimer;
+  bool _checking = false;
+
   final void Function(UsageWarning warning) onWarning;
+  final void Function(String packageName)? onInactivityReset;
 
-  MonitoringService({required this.onWarning});
+  final Map<String, int> _lastUsage = {};
+  final Map<String, DateTime> _lastChange = {};
+  final Set<String> _activeWarnings = {};
 
-  /// Starts polling every [interval] (default 15 seconds).
+  MonitoringService({required this.onWarning, this.onInactivityReset});
+
   void start({Duration interval = const Duration(seconds: 15)}) {
     _pollTimer?.cancel();
     _pollTimer = Timer.periodic(interval, (_) => _checkUsage());
-    // Also run an immediate check on start rather than waiting for
-    // the first interval to elapse.
     _checkUsage();
   }
 
@@ -72,61 +85,70 @@ class MonitoringService {
   }
 
   Future<void> _checkUsage() async {
-    final hasAccess = await UsageService.hasUsageAccess();
-    if (!hasAccess) return;
+    if (_checking) return;
+    _checking = true;
+    try {
+      if (!await UsageService.hasUsageAccess()) return;
 
-    final prefs = await UserPreferences.load();
-    if (prefs.monitoredApps.isEmpty) return;
+      // Separate isolate => separate prefs cache. Re-read from disk.
+      final sp = await SharedPreferences.getInstance();
+      await sp.reload();
+      final prefs = await UserPreferences.load(reload: true);
+      if (prefs.monitoredApps.isEmpty) return;
 
-    final packageNames =
-    prefs.monitoredApps.map((a) => a.packageName).toList();
-    final usageMap = await UsageService.getTodayUsageForApps(packageNames);
+      final usageMap = await UsageService.getTodayUsageForApps(
+          prefs.monitoredApps.map((a) => a.packageName).toList());
+      final now = DateTime.now();
 
-    for (final app in prefs.monitoredApps) {
-      final usedMinutes = usageMap[app.packageName] ?? 0;
-      if (app.dailyLimitMinutes <= 0) continue;
+      for (final app in prefs.monitoredApps) {
+        final used = usageMap[app.packageName] ?? 0;
 
-      final fraction = usedMinutes / app.dailyLimitMinutes;
+        // --- 30-minute inactivity tracking ---
+        final prev = _lastUsage[app.packageName];
+        if (prev == null || used > prev) _lastChange[app.packageName] = now;
+        _lastUsage[app.packageName] = used;
 
-      // Check tiers from highest to lowest so if usage jumps quickly
-      // (e.g. app was closed a while, usage caught up), we fire the
-      // highest relevant tier rather than every lower one at once.
-      for (final tier in [
-        WarningTier.limitReached,
-        WarningTier.ninety,
-        WarningTier.eighty,
-        WarningTier.seventy,
-      ]) {
-        if (fraction >= tier.thresholdFraction) {
-          final alreadyFired = await _hasFiredToday(app.packageName, tier);
-          if (!alreadyFired) {
-            await _markFiredToday(app.packageName, tier);
-            onWarning(
-              UsageWarning(app: app, tier: tier, usedMinutes: usedMinutes),
-            );
+        if (_activeWarnings.contains(app.packageName) &&
+            now.difference(_lastChange[app.packageName]!) >= inactivityReset) {
+          _activeWarnings.remove(app.packageName);
+          onInactivityReset?.call(app.packageName);
+        }
+
+        if (app.dailyLimitMinutes <= 0) continue;
+        final fraction = used / app.dailyLimitMinutes;
+
+        for (final tier in [
+          WarningTier.limitReached,
+          WarningTier.ninety,
+          WarningTier.eighty,
+          WarningTier.seventy,
+        ]) {
+          if (fraction >= tier.thresholdFraction) {
+            if (!await _hasFiredToday(app.packageName, tier)) {
+              await _markFiredToday(app.packageName, tier);
+              _activeWarnings.add(app.packageName);
+              onWarning(UsageWarning(app: app, tier: tier, usedMinutes: used));
+            }
+            break;
           }
-          break; // Only fire the single highest applicable tier per check
         }
       }
+    } finally {
+      _checking = false;
     }
   }
 
   String _todayKey() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final n = DateTime.now();
+    return '${n.year}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
   }
 
-  String _prefsKey(String packageName, WarningTier tier) {
-    return 'warned_${packageName}_${tier.storageSuffix}_${_todayKey()}';
-  }
+  String _prefsKey(String pkg, WarningTier t) =>
+      'warned_${pkg}_${t.storageSuffix}_${_todayKey()}';
 
-  Future<bool> _hasFiredToday(String packageName, WarningTier tier) async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_prefsKey(packageName, tier)) ?? false;
-  }
+  Future<bool> _hasFiredToday(String pkg, WarningTier t) async =>
+      (await SharedPreferences.getInstance()).getBool(_prefsKey(pkg, t)) ?? false;
 
-  Future<void> _markFiredToday(String packageName, WarningTier tier) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_prefsKey(packageName, tier), true);
-  }
+  Future<void> _markFiredToday(String pkg, WarningTier t) async =>
+      (await SharedPreferences.getInstance()).setBool(_prefsKey(pkg, t), true);
 }

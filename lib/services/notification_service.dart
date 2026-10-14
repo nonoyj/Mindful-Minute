@@ -1,78 +1,97 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Wraps flutter_local_notifications: handles one-time setup and
-/// showing real notification-bar alerts for usage warnings.
-///
-/// This is still fully offline — flutter_local_notifications talks
-/// directly to the Android notification system, no network involved.
+typedef PayloadHandler = void Function(String? payload);
+
+/// Works in BOTH the UI isolate and the background-service isolate.
 class NotificationService {
   NotificationService._();
 
   static final FlutterLocalNotificationsPlugin _plugin =
-  FlutterLocalNotificationsPlugin();
-
+      FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
 
-  /// Call once, before runApp(). Sets up the plugin and requests
-  /// notification permission (required at runtime on Android 13+).
-  static Future<void> init() async {
+  static const foregroundChannelId = 'mindful_foreground';
+  static const foregroundNotificationId = 888;
+
+  static Future<void> init({
+    PayloadHandler? onTap,
+    bool requestPermission = true,
+  }) async {
     if (_initialized) return;
 
-    const AndroidInitializationSettings androidSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings settings = InitializationSettings(
-      android: androidSettings,
+    await _plugin.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      ),
+      onDidReceiveNotificationResponse:
+          onTap == null ? null : (r) => onTap(r.payload),
     );
 
-    // Newer flutter_local_notifications versions use a named
-    // `settings` parameter here instead of a positional one.
-    await _plugin.initialize(settings: settings);
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
-    // Android 13+ (API 33+) requires this explicit runtime request;
-    // it's a no-op (returns true) on older versions.
-    await _plugin
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
+    // Channel for the persistent "service is running" notification.
+    await android?.createNotificationChannel(const AndroidNotificationChannel(
+      foregroundChannelId,
+      'Mindful Minute monitoring',
+      description: 'Keeps usage monitoring alive in the background.',
+      importance: Importance.low,
+    ));
 
+    if (requestPermission) {
+      await android?.requestNotificationsPermission();
+      // Needed on Android 14+ so the 100% alert can open the app.
+      await android?.requestFullScreenIntentPermission();
+    }
     _initialized = true;
   }
 
-  /// Shows a notification-bar alert for a usage warning.
-  ///
-  /// [id] should be stable per (app, tier) pair so repeated warnings
-  /// for the same app/tier replace each other instead of stacking up
-  /// endlessly in the notification shade.
+  /// Payload of the notification that cold-started the app, if any.
+  static Future<String?> launchPayload() async {
+    final d = await _plugin.getNotificationAppLaunchDetails();
+    if (d?.didNotificationLaunchApp ?? false) {
+      return d!.notificationResponse?.payload;
+    }
+    return null;
+  }
+
+  /// Stable id per (app, tier) so repeats replace instead of stacking.
+  static int idFor(String packageName, int tierIndex) {
+    var h = 17;
+    for (final c in packageName.codeUnits) {
+      h = (h * 31 + c) & 0x7fffffff;
+    }
+    return (h ^ tierIndex) & 0x7fffffff;
+  }
+
   static Future<void> showWarning({
     required int id,
     required String title,
     required String body,
+    String? payload,
+    bool fullScreen = false,
   }) async {
-    const AndroidNotificationDetails androidDetails =
-    AndroidNotificationDetails(
-      'usage_warnings', // channel id
-      'Usage Warnings', // channel name, shown in system settings
-      channelDescription:
-      'Alerts when a monitored app is approaching or has hit its '
-          'daily time limit.',
+    final details = AndroidNotificationDetails(
+      fullScreen ? 'wellness_break' : 'usage_warnings',
+      fullScreen ? 'Wellness Break' : 'Usage Warnings',
+      channelDescription: fullScreen
+          ? 'Opens Mindful Minute when a daily limit is reached.'
+          : 'Alerts when a monitored app is approaching its daily limit.',
       importance: Importance.high,
       priority: Priority.high,
+      fullScreenIntent: fullScreen,
+      autoCancel: true,
     );
-
-    const NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-    );
-
-    // Newer flutter_local_notifications versions require id, title,
-    // body, and notificationDetails to all be passed as named
-    // arguments (the old positional-args signature is gone, and the
-    // `details` param was renamed to `notificationDetails`).
     await _plugin.show(
       id: id,
       title: title,
       body: body,
-      notificationDetails: details,
+      notificationDetails: NotificationDetails(android: details),
+      payload: payload,
     );
+  }
+
+  static Future<void> cancel(int id) async {
+    await _plugin.cancel(id: id);
   }
 }

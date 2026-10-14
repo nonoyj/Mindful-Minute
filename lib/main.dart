@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 
+import 'screens/history_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/preferences_screen.dart';
+import 'services/background_service.dart';
+import 'services/break_launcher.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService.init();
+  await NotificationService.init(onTap: BreakLauncher.handlePayload);
+  await initBackgroundService();
   runApp(const MindfulMinuteApp());
 }
 
@@ -17,6 +21,7 @@ class MindfulMinuteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Mindful Minute',
+      navigatorKey: appNavigatorKey,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
@@ -38,36 +43,31 @@ class _RootNavigationState extends State<RootNavigation> {
 
   static const List<Widget> _screens = [
     HomeScreen(),
+    HistoryScreen(),
     PreferencesScreen(),
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // If the 100% alert launched the app from a closed state, start the break.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final payload = await NotificationService.launchPayload();
+      BreakLauncher.handlePayload(payload);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // IndexedStack keeps both screens' State objects alive at all
-      // times (just hides the inactive one), instead of disposing
-      // HomeScreen -- and its MonitoringService timer -- every time
-      // the user switches to Preferences.
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _screens,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _screens),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.self_improvement),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings),
-            label: 'Preferences',
-          ),
+          NavigationDestination(icon: Icon(Icons.self_improvement), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Progress'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Preferences'),
         ],
       ),
     );
