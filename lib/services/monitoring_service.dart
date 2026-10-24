@@ -101,11 +101,12 @@ class MonitoringService {
       final now = DateTime.now();
 
       for (final app in prefs.monitoredApps) {
+        if (!app.enabled) continue;
         final used = usageMap[app.packageName] ?? 0;
 
         // --- 30-minute inactivity tracking ---
         final prev = _lastUsage[app.packageName];
-        if (prev == null || used > prev) _lastChange[app.packageName] = now;
+        if (prev == null || used != prev) _lastChange[app.packageName] = now;
         _lastUsage[app.packageName] = used;
 
         if (_activeWarnings.contains(app.packageName) &&

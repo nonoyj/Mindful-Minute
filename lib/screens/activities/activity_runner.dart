@@ -4,14 +4,28 @@ import 'package:flutter/services.dart';
 
 import '../../models/user_preferences.dart';
 import '../../services/session_service.dart';
+import '../../theme.dart';
+import 'activity_music.dart';
 import 'content_widgets.dart';
 import 'mini_games.dart';
 
-/// Runs ANY activity for 60 seconds and records the completed session.
+/// Runs one activity for 60 seconds (dark UI, same look as the dashboard).
 class ActivityRunnerScreen extends StatefulWidget {
   final WellnessActivityType type;
-  final String? banner;
-  const ActivityRunnerScreen({super.key, required this.type, this.banner});
+  final String? stepLabel; // e.g. "1 / 3"
+  final bool locked; // real break: no back button
+  final VoidCallback? onComplete; // Next / Finish pressed
+  final VoidCallback? onCancel; // Cancel pressed while running
+  final String doneLabel;
+  const ActivityRunnerScreen({
+    super.key,
+    required this.type,
+    this.stepLabel,
+    this.locked = false,
+    this.onComplete,
+    this.onCancel,
+    this.doneLabel = 'Done',
+  });
 
   @override
   State<ActivityRunnerScreen> createState() => _ActivityRunnerScreenState();
@@ -51,10 +65,14 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
 
   void _cancel() {
     _timer?.cancel();
-    setState(() {
-      _running = false;
-      _remaining = kActivitySeconds;
-    });
+    if (widget.onCancel != null) {
+      widget.onCancel!();
+    } else {
+      setState(() {
+        _running = false;
+        _remaining = kActivitySeconds;
+      });
+    }
   }
 
   @override
@@ -63,119 +81,136 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
     super.dispose();
   }
 
+  /// Each activity has its OWN music file (assets/audio/...).
+  String get _musicAsset {
+    switch (widget.type) {
+      case WellnessActivityType.breathing:
+        return 'audio/breathing.mp3';
+      case WellnessActivityType.miniGame:
+        return 'audio/mini_game.mp3';
+      case WellnessActivityType.reminders:
+        return 'audio/wellness_reminders.mp3';
+    }
+  }
+
   Widget _content() {
+    if (_done) return _inner();
+    return Stack(fit: StackFit.expand, children: [
+      _inner(),
+      MusicLayer(asset: _musicAsset, running: _running),
+    ]);
+  }
+
+  Widget _inner() {
     if (_done) {
       return Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.check_circle, size: 96, color: Colors.teal.shade400),
-          const SizedBox(height: 16),
+        child: Column(mainAxisSize: MainAxisSize.min, children: const [
+          Icon(Icons.check_circle, size: 96, color: Pal.accent),
+          SizedBox(height: 16),
           Text('Well done!',
-              style: TextStyle(fontSize: 28, color: Colors.teal.shade800)),
-          const SizedBox(height: 8),
-          Text('Session saved.', style: TextStyle(color: Colors.teal.shade600)),
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+          SizedBox(height: 8),
+          Text('Session saved.', style: TextStyle(color: Pal.muted)),
         ]),
       );
     }
     switch (widget.type) {
       case WellnessActivityType.breathing:
         return BreathingContent(remaining: _remaining, running: _running);
-      case WellnessActivityType.quotes:
-        return RotatingTextContent(
-            items: kQuotes,
-            intervalSeconds: 12,
-            remaining: _remaining,
-            icon: Icons.format_quote);
-      case WellnessActivityType.textReminder:
-        return RotatingTextContent(
-            items: kReminders,
-            intervalSeconds: 15,
-            remaining: _remaining,
-            icon: Icons.favorite_border);
-      case WellnessActivityType.audio:
-        return AudioContent(running: _running);
-      case WellnessActivityType.video:
-        return const NatureContent();
+      case WellnessActivityType.reminders:
+        return RemindersContent(remaining: _remaining, running: _running);
       case WellnessActivityType.miniGame:
         return _running
             ? const MiniGameContent(key: ValueKey('game'))
-            : Center(
+            : const Center(
                 child: Text('Tap Start for a one-minute game',
-                    style: TextStyle(color: Colors.teal.shade700, fontSize: 16)));
+                    style: TextStyle(color: Pal.muted, fontSize: 16)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.teal.shade50,
-      appBar: AppBar(
-        title: Text(widget.type.label),
-        backgroundColor: Colors.teal.shade50,
-        foregroundColor: Colors.teal.shade800,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(children: [
-            if (widget.banner != null)
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
+    return PopScope(
+      canPop: !widget.locked,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: !widget.locked,
+          title: Text(widget.type.label),
+          actions: [
+            if (widget.stepLabel != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: Center(
+                  child: Text(widget.stepLabel!,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Pal.accent)),
                 ),
-                child: Text(widget.banner!,
-                    style: TextStyle(color: Colors.orange.shade900)),
               ),
-            Text('$_remaining s',
-                style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w300,
-                    color: Colors.teal.shade900)),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: 1 - _remaining / kActivitySeconds,
-              minHeight: 8,
-              backgroundColor: Colors.teal.shade100,
-              color: Colors.teal.shade400,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            const SizedBox(height: 16),
-            Expanded(child: _content()),
-            const SizedBox(height: 12),
-            if (_done)
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: _btn(),
-                child: const Text('Done'),
-              )
-            else ...[
-              ElevatedButton(
-                onPressed: _running ? null : _start,
-                style: _btn(),
-                child: Text(_running ? 'In Progress...' : 'Start'),
+          ],
+        ),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(children: [
+              Text.rich(TextSpan(children: [
+                TextSpan(
+                    text: '$_remaining',
+                    style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w700)),
+                const TextSpan(
+                    text: '  sec', style: TextStyle(fontSize: 16, color: Pal.muted)),
+              ])),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: 1 - _remaining / kActivitySeconds,
+                minHeight: 6,
+                backgroundColor: Pal.card2,
+                color: Pal.accent,
+                borderRadius: BorderRadius.circular(6),
               ),
-              if (_running)
-                TextButton(
-                  onPressed: _cancel,
-                  child: Text('Cancel',
-                      style: TextStyle(color: Colors.teal.shade700)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: Pal.card, borderRadius: BorderRadius.circular(24)),
+                  child: _content(),
                 ),
-            ],
-          ]),
+              ),
+              const SizedBox(height: 16),
+              if (_done)
+                _btn(widget.doneLabel, () {
+                  if (widget.onComplete != null) {
+                    widget.onComplete!();
+                  } else {
+                    Navigator.of(context).pop();
+                  }
+                })
+              else if (_running)
+                _btn('Cancel', _cancel, secondary: true)
+              else
+                _btn('Start', _start),
+            ]),
+          ),
         ),
       ),
     );
   }
 
-  ButtonStyle _btn() => ElevatedButton.styleFrom(
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        textStyle: const TextStyle(fontSize: 18),
+  Widget _btn(String label, VoidCallback onTap, {bool secondary = false}) =>
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
+          onPressed: onTap,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: secondary ? Pal.card2 : Pal.accent,
+            foregroundColor: secondary ? Colors.white : Colors.black,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          ),
+          child: Text(label),
+        ),
       );
 }

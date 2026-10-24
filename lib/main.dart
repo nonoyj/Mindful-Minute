@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'screens/dashboard_screen.dart';
 import 'screens/history_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/preferences_screen.dart';
+import 'screens/settings_screen.dart';
 import 'services/background_service.dart';
 import 'services/break_launcher.dart';
 import 'services/notification_service.dart';
+import 'theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,10 +23,7 @@ class MindfulMinuteApp extends StatelessWidget {
     return MaterialApp(
       title: 'Mindful Minute',
       navigatorKey: appNavigatorKey,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
+      theme: buildDarkTheme(),
       home: const RootNavigation(),
     );
   }
@@ -33,41 +31,52 @@ class MindfulMinuteApp extends StatelessWidget {
 
 class RootNavigation extends StatefulWidget {
   const RootNavigation({super.key});
-
   @override
   State<RootNavigation> createState() => _RootNavigationState();
 }
 
-class _RootNavigationState extends State<RootNavigation> {
-  int _selectedIndex = 0;
-
-  static const List<Widget> _screens = [
-    HomeScreen(),
-    HistoryScreen(),
-    PreferencesScreen(),
-  ];
+class _RootNavigationState extends State<RootNavigation> with WidgetsBindingObserver {
+  int _index = 0;
 
   @override
   void initState() {
     super.initState();
-    // If the 100% alert launched the app from a closed state, start the break.
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final payload = await NotificationService.launchPayload();
-      BreakLauncher.handlePayload(payload);
+      // Launched by a notification tap?
+      BreakLauncher.handlePayload(await NotificationService.launchPayload());
+      // Launched by the native lock (break in progress)?
+      BreakLauncher.checkGuard();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The native guard brings us to the front: re-open the break if needed.
+    if (state == AppLifecycleState.resumed) BreakLauncher.checkGuard();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _selectedIndex, children: _screens),
+      body: IndexedStack(index: _index, children: [
+        DashboardScreen(onOpenSettings: () => setState(() => _index = 2)),
+        const HistoryScreen(),
+        const SettingsScreen(),
+      ]),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.self_improvement), label: 'Home'),
+          NavigationDestination(icon: Icon(Icons.self_improvement), label: 'Breaks'),
           NavigationDestination(icon: Icon(Icons.bar_chart), label: 'Progress'),
-          NavigationDestination(icon: Icon(Icons.settings), label: 'Preferences'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );

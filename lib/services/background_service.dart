@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
+import 'guard_service.dart';
 import 'monitoring_service.dart';
 import 'notification_service.dart';
 
@@ -38,6 +39,9 @@ Future<void> onStart(ServiceInstance service) async {
   final monitor = MonitoringService(
     onWarning: (w) async {
       final limit = w.tier == WarningTier.limitReached;
+      // Arm the native lock BEFORE anything else: it reopens the app and
+      // keeps it in front until the break is finished.
+      if (limit) await GuardService.start(w.app.packageName);
       await NotificationService.showWarning(
         id: NotificationService.idFor(w.app.packageName, w.tier.index),
         title: 'Mindful Minute',

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../models/user_preferences.dart';
-import '../screens/activities/activity_runner.dart';
-import '../screens/activity_picker_screen.dart';
+import '../screens/wellness_break_screen.dart';
+import 'guard_service.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Opens the wellness break for a monitored app (used for the 100% alert).
+/// Opens the LOCKED wellness break (the 100% alert).
 class BreakLauncher {
   static bool _open = false;
 
@@ -16,8 +16,17 @@ class BreakLauncher {
     }
   }
 
+  /// Called on cold start and every time the app returns to the foreground:
+  /// if the native lock is armed, make sure the break screen is showing.
+  static Future<void> checkGuard() async {
+    if (await GuardService.isActive()) {
+      final pkg = await GuardService.activePackage();
+      if (pkg != null) await openBreakFor(pkg);
+    }
+  }
+
   static Future<void> openBreakFor(String packageName) async {
-    if (_open) return; // avoid double-opening (stream event + notification tap)
+    if (_open) return;
     final nav = appNavigatorKey.currentState;
     if (nav == null) return;
 
@@ -26,16 +35,13 @@ class BreakLauncher {
     for (final a in prefs.monitoredApps) {
       if (a.packageName == packageName) app = a;
     }
-    final banner = app == null
-        ? 'Time for a Mindful Minute'
-        : "You've reached today's limit for ${app.displayName}";
+    app ??= MonitoredApp(
+        packageName: packageName, displayName: 'your app', dailyLimitMinutes: 0);
 
     _open = true;
     try {
       await nav.push(MaterialPageRoute(
-        builder: (_) => app?.activity != null
-            ? ActivityRunnerScreen(type: app!.activity!, banner: banner)
-            : ActivityPickerScreen(banner: banner),
+        builder: (_) => WellnessBreakScreen(app: app!, locked: true),
       ));
     } finally {
       _open = false;

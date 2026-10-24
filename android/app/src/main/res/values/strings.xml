@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_desc">Only while a wellness break is running: keeps Mindful Minute in front, closes the notification shade and stops the break music from being turned down. It does not read your screen or any content.</string>
+</resources>

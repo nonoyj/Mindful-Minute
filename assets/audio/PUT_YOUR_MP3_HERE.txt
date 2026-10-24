@@ -1,0 +1,2 @@
+Put your mp3 in this folder and name it exactly:  wellness_music.mp3
+(then add the assets lines to pubspec.yaml, see README.md)
