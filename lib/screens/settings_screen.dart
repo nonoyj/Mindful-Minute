@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/guard_service.dart';
 import '../services/usage_service.dart';
 import '../theme.dart';
+import 'help_screens.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -28,7 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _load();
+    if (state == AppLifecycleState.resumed) _load(); // back from system settings
   }
 
   Future<void> _load() async {
@@ -39,17 +40,37 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
     if (mounted) setState(() { _usage = u; _overlay = o; _acc = a; _battery = b; });
   }
 
-  Widget _tile(String title, String sub, bool ok, VoidCallback onTap) => Container(
+  /// A switch that shows the REAL permission state. Android never lets an app
+  /// grant or revoke these itself, so flipping it opens the system page where
+  /// you turn it on OR off; the switch updates when you come back.
+  Widget _perm(String title, String sub, bool on, VoidCallback openSystemPage) =>
+      Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration:
+            BoxDecoration(color: Pal.card, borderRadius: BorderRadius.circular(16)),
+        child: SwitchListTile(
+          value: on,
+          onChanged: (_) => openSystemPage(),
+          activeThumbColor: Colors.white,
+          activeTrackColor: Pal.accent,
+          secondary: Icon(on ? Icons.check_circle : Icons.error_outline,
+              color: on ? Pal.accent : Colors.orange.shade400),
+          title: Text(title),
+          subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
+        ),
+      );
+
+
+  Widget _link(IconData icon, String title, Widget page) => Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration:
             BoxDecoration(color: Pal.card, borderRadius: BorderRadius.circular(16)),
         child: ListTile(
-          leading: Icon(ok ? Icons.check_circle : Icons.error_outline,
-              color: ok ? Pal.accent : Colors.orange.shade400),
+          leading: Icon(icon, color: Pal.accent),
           title: Text(title),
-          subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
-          trailing: ok ? null : const Icon(Icons.chevron_right),
-          onTap: ok ? null : onTap,
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute(builder: (_) => page)),
         ),
       );
 
@@ -61,22 +82,36 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         const Text('Permissions',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 4),
-        const Text('All four are needed for the break to be a total lock.',
-            style: TextStyle(color: Pal.muted, fontSize: 13)),
+        const Text(
+          'Tap a switch to open the system page where you can turn the '
+          'permission on or off. The switch updates when you come back.',
+          style: TextStyle(color: Pal.muted, fontSize: 13),
+        ),
         const SizedBox(height: 12),
-        _tile('Usage access', 'Measures time spent in your monitored apps.',
+        _perm('Usage access', 'Measures time spent in your monitored apps.',
             _usage, UsageService.openUsageAccessSettings),
-        _tile('Display over other apps',
+        _perm('Display over other apps',
             'Lets the break reopen on top of any app or the home screen.',
             _overlay, GuardService.requestOverlay),
-        _tile('Accessibility: "Mindful Minute lock"',
+        _perm('Accessibility: "Mindful Minute lock"',
             'Closes the notification shade, blocks Home / Recents instantly and '
-            'keeps the break music volume up. Open it, pick Mindful Minute lock, '
-            'turn it on.',
+            'keeps the break music volume up.',
             _acc, GuardService.requestAccessibility),
-        _tile('Unrestricted battery',
-            'Stops Android from killing the background monitor.',
-            _battery, GuardService.requestIgnoreBattery),
+        _perm('Unrestricted battery',
+            'Turned on automatically when you switch a '
+            'break on. Monitoring stops when every break is off.',
+            _battery,
+            _battery ? GuardService.openBatterySettings : GuardService.requestIgnoreBattery),
+        const SizedBox(height: 20),
+        const Text('Help',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 12),
+        _link(Icons.help_outline, 'FAQ', const FaqScreen()),
+        _link(Icons.verified_user_outlined, 'Why we need permissions',
+            const PermissionsInfoScreen()),
+        _link(Icons.science_outlined, 'The research behind it', const ResearchScreen()),
+        _link(Icons.feedback_outlined, 'Send feedback', const FeedbackScreen()),
+        _link(Icons.info_outline, 'About', const AboutScreen()),
         const SizedBox(height: 20),
         const Text('How the lock works',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),

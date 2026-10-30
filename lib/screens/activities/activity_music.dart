@@ -22,6 +22,7 @@ class _MusicLayerState extends State<MusicLayer> {
   @override
   void initState() {
     super.initState();
+    _player.onLog.listen((m) => debugPrint('audio: $m'));
     if (widget.running) _play();
   }
 
@@ -32,14 +33,28 @@ class _MusicLayerState extends State<MusicLayer> {
     if (!widget.running && old.running) _player.stop();
   }
 
+  void _report(String msg) {
+    debugPrint('MusicLayer: $msg');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: Colors.red.shade800,
+      duration: const Duration(seconds: 10),
+    ));
+  }
+
   Future<void> _play() async {
     try {
       await _player.setReleaseMode(ReleaseMode.loop);
       await _player.play(AssetSource(widget.asset));
-    } catch (_) {
+    } catch (e) {
+      // Shows a red message with the real reason, then plays fallback tones.
+      _report('Could not load assets/${widget.asset}\n$e\nPlaying fallback tones.');
       try {
         await _player.play(BytesSource(calmWav(), mimeType: 'audio/wav'));
-      } catch (_) {}
+      } catch (e2) {
+        _report('Fallback audio also failed: $e2');
+      }
     }
   }
 

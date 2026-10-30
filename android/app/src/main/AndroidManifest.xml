@@ -34,16 +34,23 @@
             </intent-filter>
         </activity>
 
-        <!-- Background usage-monitoring service (flutter_background_service) -->
+        <!-- Native usage monitor: sticky foreground service that survives closing the app -->
         <service
-            android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:exported="true"
-            android:foregroundServiceType="specialUse"
-            tools:replace="android:exported,android:foregroundServiceType">
+            android:name=".MonitorService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Monitors app usage time to show digital wellbeing warnings" />
         </service>
+
+        <receiver android:name=".BootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Break lock (accessibility): active only during a wellness break -->
         <service

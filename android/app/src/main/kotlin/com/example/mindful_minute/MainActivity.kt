@@ -3,6 +3,7 @@ package com.example.mindful_minute
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import java.io.File
 import android.os.PowerManager
@@ -35,6 +36,40 @@ class MainActivity : FlutterActivity() {
                                 Uri.parse("package:$packageName"))
                         )
                         result.success(null)
+                    }
+                    "openBatterySettings" -> {
+                        startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        result.success(null)
+                    }
+                    "startMonitor" -> {
+                        MonitorService.start(this)
+                        result.success(null)
+                    }
+                    "stopMonitor" -> {
+                        MonitorService.stop(this)
+                        result.success(null)
+                    }
+                    "cancelWarnings" -> {
+                        MonitorService.cancelWarnings(this, call.argument<String>("pkg") ?: "")
+                        result.success(null)
+                    }
+                    "deviceInfo" -> result.success(
+                        "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), " +
+                            "${Build.MANUFACTURER} ${Build.MODEL}"
+                    )
+                    "sendEmail" -> {
+                        val i = Intent(Intent.ACTION_SENDTO).apply {
+                            data = Uri.parse("mailto:")
+                            putExtra(Intent.EXTRA_EMAIL, arrayOf(call.argument<String>("to") ?: ""))
+                            putExtra(Intent.EXTRA_SUBJECT, call.argument<String>("subject") ?: "")
+                            putExtra(Intent.EXTRA_TEXT, call.argument<String>("body") ?: "")
+                        }
+                        try {
+                            startActivity(Intent.createChooser(i, "Send feedback"))
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.success(false)
+                        }
                     }
                     "hasAccessibility" -> {
                         val enabled = Settings.Secure.getString(

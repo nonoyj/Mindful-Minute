@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 
 import '../models/user_preferences.dart';
 import '../services/guard_service.dart';
-import '../services/monitoring_service.dart';
-import '../services/notification_service.dart';
 import '../services/usage_service.dart';
 import '../theme.dart';
 import 'activities/activity_runner.dart';
@@ -79,10 +77,7 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
     if (widget.locked) {
       await GuardService.stop();
       await UsageService.resetApp(widget.app.packageName);
-      for (final t in WarningTier.values) {
-        await NotificationService.cancel(
-            NotificationService.idFor(widget.app.packageName, t.index));
-      }
+      await GuardService.cancelWarnings(widget.app.packageName);
     }
     if (mounted) setState(() => _stage = _Stage.done);
   }

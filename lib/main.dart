@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -37,11 +38,14 @@ class RootNavigation extends StatefulWidget {
 
 class _RootNavigationState extends State<RootNavigation> with WidgetsBindingObserver {
   int _index = 0;
+  Timer? _guardTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _guardTimer = Timer.periodic(
+        const Duration(seconds: 2), (_) => BreakLauncher.checkGuard());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Launched by a notification tap?
       BreakLauncher.handlePayload(await NotificationService.launchPayload());
@@ -52,6 +56,7 @@ class _RootNavigationState extends State<RootNavigation> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _guardTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

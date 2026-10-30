@@ -1,13 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../models/user_preferences.dart';
 import '../services/apps_cache.dart';
+import '../services/background_service.dart';
 import '../services/break_launcher.dart';
 import '../services/guard_service.dart';
-import '../services/monitoring_service.dart';
 import '../services/session_service.dart';
 import '../services/usage_service.dart';
 import '../theme.dart';
@@ -30,7 +29,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _total = 0;
   int _streak = 0;
   Timer? _timer;
-  StreamSubscription? _sub;
 
   @override
   void initState() {
@@ -41,22 +39,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _refresh();
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _refresh());
     SessionService.changes.addListener(_refresh);
-    _sub = FlutterBackgroundService().on('warning').listen((data) {
-      if (data == null) return;
-      final tier = data['tier'] as String;
-      if (tier == WarningTier.limitReached.name) {
-        BreakLauncher.openBreakFor(data['package'] as String);
-      } else {
-        _snack(data['message'] as String, tier);
-      }
-      _refresh();
-    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _sub?.cancel();
     SessionService.changes.removeListener(_refresh);
     super.dispose();
   }
@@ -104,15 +91,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (_) => EditBreakScreen(existing: existing, taken: taken),
     ));
     if (r != null) {
+      final isNew = existing == null;
+      // A newly monitored app ALWAYS starts at 0 minutes.
+      if (isNew) await UsageService.resetApp(r.packageName);
       prefs.addOrUpdateApp(r);
       await prefs.save();
+      await _applyMonitoring(turnedOn: isNew && r.enabled);
       _refresh();
     }
   }
 
+  /// Switch on/off. Turning a break ON starts its tracking from 0 again.
   Future<void> _update(MonitoredApp a) async {
+    if (a.enabled) await UsageService.resetApp(a.packageName);
     _prefs!.addOrUpdateApp(a);
     await _prefs!.save();
+    await _applyMonitoring(turnedOn: a.enabled);
     _refresh();
   }
 
@@ -121,7 +115,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _prefs!.save();
     // Deleting a break also resets that app's usage tracking.
     await UsageService.resetApp(a.packageName);
+    await _applyMonitoring(turnedOn: false);
     _refresh();
+  }
+
+  /// Background monitor runs only while at least one break is ON.
+  /// Turning one ON also asks for the battery exemption (system dialog).
+  Future<void> _applyMonitoring({required bool turnedOn}) async {
+    final anyOn = _prefs!.monitoredApps.any((a) => a.enabled);
+    await syncBackgroundService();
+    if (anyOn && turnedOn && !await GuardService.isIgnoringBattery()) {
+      await GuardService.requestIgnoreBattery();
+    } else if (!anyOn && await GuardService.isIgnoringBattery() && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text(
+            'Monitoring paused. Android only lets you remove the battery '
+            'exemption yourself.'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'Battery settings',
+          onPressed: GuardService.openBatterySettings,
+        ),
+      ));
+    }
   }
 
   String _headline() {

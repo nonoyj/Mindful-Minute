@@ -226,7 +226,8 @@ object BreakGuard {
             f.outputStream().use { input.copyTo(it) }
         }
         f
-    } catch (_: Exception) {
+    } catch (e: Exception) {
+        android.util.Log.w("BreakGuard", "limit_screen.mp3 could not be loaded: $e")
         null // asset missing -> falls back to the built-in tones
     }
 

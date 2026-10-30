@@ -50,9 +50,41 @@ class GuardService {
     }
   }
 
+  // --- native monitor + helpers ---
+  static Future<void> setMonitor(bool on) async {
+    try {
+      await _ch.invokeMethod(on ? 'startMonitor' : 'stopMonitor');
+    } catch (_) {}
+  }
+
+  static Future<void> cancelWarnings(String pkg) async {
+    try {
+      await _ch.invokeMethod('cancelWarnings', {'pkg': pkg});
+    } catch (_) {}
+  }
+
+  static Future<String> deviceInfo() async {
+    try {
+      return (await _ch.invokeMethod<String>('deviceInfo')) ?? 'unknown';
+    } catch (_) {
+      return 'unknown';
+    }
+  }
+
+  static Future<bool> sendEmail(String to, String subject, String body) async {
+    try {
+      return (await _ch.invokeMethod<bool>(
+              'sendEmail', {'to': to, 'subject': subject, 'body': body})) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> hasOverlay() => _bool('hasOverlay');
   static Future<bool> isIgnoringBattery() => _bool('isIgnoringBattery');
   static Future<bool> hasAccessibility() => _bool('hasAccessibility');
+  static Future<void> openBatterySettings() => _ch.invokeMethod('openBatterySettings');
   static Future<void> requestOverlay() => _ch.invokeMethod('requestOverlay');
   static Future<void> requestIgnoreBattery() =>
       _ch.invokeMethod('requestIgnoreBattery');
