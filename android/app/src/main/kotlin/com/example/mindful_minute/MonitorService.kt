@@ -45,7 +45,31 @@ class MonitorService : Service() {
             Triple(0.8, "80", 1), Triple(0.7, "70", 0)
         )
 
+        /** True only if at least one break is switched ON. */
+        fun hasEnabledApps(ctx: Context): Boolean {
+            val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val json = sp.getString("flutter.monitoredApps", null) ?: return false
+            return try {
+                val arr = JSONArray(json)
+                (0 until arr.length()).any { arr.getJSONObject(it).optBoolean("enabled", true) }
+            } catch (_: Exception) { false }
+        }
+
+        /** Removes the warning notifications of every app in the saved list. */
+        fun clearAllWarnings(ctx: Context) {
+            val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val json = sp.getString("flutter.monitoredApps", null) ?: return
+            try {
+                val arr = JSONArray(json)
+                for (i in 0 until arr.length()) {
+                    cancelWarnings(ctx, arr.getJSONObject(i).getString("packageName"))
+                }
+            } catch (_: Exception) {}
+        }
+
         fun start(ctx: Context) {
+            // Nothing is switched on -> do not start, so no notification can appear.
+            if (!hasEnabledApps(ctx)) return
             val i = Intent(ctx, MonitorService::class.java)
             try {
                 if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
@@ -54,6 +78,9 @@ class MonitorService : Service() {
 
         fun stop(ctx: Context) {
             ctx.stopService(Intent(ctx, MonitorService::class.java))
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            nm.cancel(FG_ID)          // the "Watching your app limits" notification
+            clearAllWarnings(ctx)     // any 70/80/90/100% alerts still in the shade
         }
 
         fun notifId(pkg: String, tier: Int): Int {
@@ -94,9 +121,13 @@ class MonitorService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createChannels()
         try {
-            goForeground()
+            goForeground() // Android requires this right after startForegroundService
         } catch (_: Exception) {
             stopSelf()
+            return START_NOT_STICKY
+        }
+        if (!hasEnabledApps(this)) {
+            shutDownQuietly()
             return START_NOT_STICKY
         }
         handler.removeCallbacks(tick)
@@ -105,7 +136,9 @@ class MonitorService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        // App swiped from recents: ask Android to make sure we are still alive.
+        // App swiped from recents: ask Android to make sure we are still alive,
+        // but only if at least one break is switched on.
+        if (!hasEnabledApps(this)) { super.onTaskRemoved(rootIntent); return }
         try {
             val pi = PendingIntent.getService(
                 applicationContext, 1, Intent(applicationContext, MonitorService::class.java),
@@ -127,18 +160,26 @@ class MonitorService : Service() {
     private fun check() {
         val sp = getSharedPreferences(PREFS, MODE_PRIVATE)
         val apps = ArrayList<App>()
+        val switchedOff = ArrayList<String>()
         sp.getString("flutter.monitoredApps", null)?.let { json ->
             val arr = JSONArray(json)
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
+                val p = o.getString("packageName")
                 if (o.optBoolean("enabled", true)) {
-                    val p = o.getString("packageName")
                     apps.add(App(p, o.optString("displayName", p), o.optInt("dailyLimitMinutes", 0)))
+                } else {
+                    switchedOff.add(p)
                 }
             }
         }
+        // A break that is switched OFF must leave no notification behind.
+        for (p in switchedOff) {
+            activeWarnings.remove(p)
+            cancelWarnings(this, p)
+        }
         if (apps.isEmpty()) {
-            stopSelf()
+            shutDownQuietly()
             return
         }
 
@@ -174,6 +215,15 @@ class MonitorService : Service() {
                 }
             }
         }
+    }
+
+    /** Stop, remove the "watching" notification and any warning notifications. */
+    private fun shutDownQuietly() {
+        clearAllWarnings(this)
+        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE)
+        else @Suppress("DEPRECATION") stopForeground(true)
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(FG_ID)
+        stopSelf()
     }
 
     /** Foreground time today per package, counting only time after the last reset. */

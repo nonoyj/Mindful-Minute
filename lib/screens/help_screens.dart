@@ -8,15 +8,13 @@ import '../theme.dart';
 const String kAppVersion = '1.0.0';
 const String kFeedbackEmail = 'delacruzjrome3@gmail.com';
 
-// Names and roles from the Mindful Minute capstone document.
 const List<(String, String)> kDevelopers = [
   ("J'rome A. De La Cruz", 'Lead Developer'),
   ('Dale M. Misajon', 'Project Manager'),
-  ('Carl Luis L. Malan', 'Documentations'),
-  ('Phenaeus Walter F. Gavilla', 'System Analyst'),
+  ('Phenaeus Walter F. Gavilla', 'Documentation'),
+  ('Carl Luis L. Malan', 'UI/UX Designer'),
 ];
 
-// ---------------------------------------------------------------- shared UI
 Widget _heading(String t) => Padding(
       padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
       child: Text(t,
@@ -60,12 +58,16 @@ const List<(String, List<(String, String)>)> _faqSections = [
   ('ABOUT THE APP', [
     ('What is Mindful Minute?',
         'Mindful Minute is an Android app that interrupts prolonged app use through '
-            'for each. When you reach a limit, the app locks the screen into a short '
-            'break made of one-minute activities, and then lets you carry on.'),
+            'guided wellness breaks. You choose which installed apps to monitor and set '
+            'a daily limit (5 to 240 minutes) and the break activities for each. It '
+            'warns you at 70%, 80% and 90% of the limit. When you reach the limit, the '
+            'app locks the screen into a short break made of one-minute activities, '
+            'and then lets you carry on.'),
     ('Who made it, and why?',
-        'It was built by J\'rome A. De la Cruz, Dale Misajon, Carl Malan, and Phenaeus Walter Gavilla '
-            'a BSIT 3A students of the University of '
-            'San Agustin (Iloilo City) as a capstone project for IT 311 Project Management.'
+        'It was built by J\'rome A. De La Cruz, Dale Misajon, Carl Luis L. Malan, and '
+            'Phenaeus Walter F. '
+            'Gavilla of the Information Technology Program, '
+            'University of San Agustin (Iloilo City). '
             'Studies of Filipino students report academic demands as the '
             'main source of stress (Bate et al., 2019) and significant digital stress, '
             'especially from social media (Giray et al., 2024). In short interviews with '
@@ -73,7 +75,7 @@ const List<(String, List<(String, String)>)> _faqSections = [
             'after realizing how long they had already been scrolling. Mindful Minute '
             'turns that moment into an intentional pause.'),
     ('Who is it for?',
-        'Mainly university students, and the study is run with University of San '
+        'It was made mainly for students but anyone can use it, no matter their age. The study is run with University of San '
             'Agustin students. Anyone with an Android phone can use it. There is no iOS '
             'or web version.'),
     ('Is it a medical or mental-health app?',
@@ -93,7 +95,13 @@ const List<(String, List<(String, String)>)> _faqSections = [
             'minutes and go much longer. You have to open them yourself. Mindful Minute '
             'does one thing: it keeps every activity at about one minute and offers it '
             'at the moment your own app limit says you may otherwise keep scrolling. It '
-            'has no subscription, no ads and no in-app purchases.'),
+            'is meant to be free to students.'),
+    ('What does the app not do?',
+        'It is Android only (no iOS or web version). It does not recommend or '
+            'assign activities for you, has no social or sharing features, does not '
+            'connect to university systems or the Guidance and Counseling Office, and '
+            'does not use wearable or biometric devices. Screen time is read only on '
+            'the phone where it is installed.'),
   ]),
   ('GETTING STARTED', [
     ('How do I set up my first break?',
@@ -225,6 +233,12 @@ const List<(String, List<(String, String)>)> _faqSections = [
             'chosen and not tedious. Research on mindfulness apps names keeping users '
             'engaged as the common weak point. Whether one minute is enough to matter is '
             'unproven, which is exactly what we are evaluating.'),
+    ('Who is testing the app?',
+        'The prototype is evaluated by 30 student users and 5 IT experts at the '
+            'University of San Agustin, using questionnaires on functionality, '
+            'usability, user engagement and perceived usefulness. The three students '
+            'interviewed early on (two BS Information Technology and one BS Biology) '
+            'are treated as exploratory, so their views do not represent all students.'),
     ('Is Wellness Reminders medical advice?',
         'No. It is educational. If your mental health is suffering, please talk to a '
             'qualified professional or a local helpline.'),
@@ -675,7 +689,7 @@ class AboutScreen extends StatelessWidget {
             '• Wellness Reminders: 30 calming animated scenes, music, 100+ quotes, '
             'research notes and tips\n'
             '• Progress tracking: sessions, daily streak and history by day\n'
-            '• Works offline. No accounts, no ads, no subscriptions')),
+            '• Works offline. No accounts, no server, no subscriptions')),
 
         _heading('HOW IT WORKS'),
         _card(_body(
@@ -744,10 +758,21 @@ class AboutScreen extends StatelessWidget {
         _card(_body(
             'Development follows Agile/Scrum: four two-week sprints, each ending in a '
             'working increment that is tested on real Android phones. After the sprints, '
-            'the prototype is evaluated by student users and IT experts on '
+            'the prototype is evaluated by 30 student users and 5 IT experts on '
             'functionality, usability, user engagement and perceived usefulness as a '
             'short break. The study does not test whether the app reduces stress or '
             'scrolling.')),
+
+        _heading('WHAT IT IS NOT'),
+        _card(_body(
+            '• Not a diagnosis or treatment tool\n'
+            '• Android only: no iOS or web version\n'
+            '• No automatic recommendations or personalization\n'
+            '• No social or sharing features\n'
+            '• No link to university systems or the Guidance and Counseling Office\n'
+            '• No wearable or biometric input\n\n'
+            'Testing covers a short period and a small group at one university, so the '
+            'findings describe that group and are not generalized to all students.')),
 
         _heading('THE SCIENCE'),
         _card(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -784,7 +809,7 @@ class AboutScreen extends StatelessWidget {
             'College of Liberal Arts, Sciences, and Education\n'
             'Bachelor of Science in Information Technology\n\n'
             'Instructor: Rovilyn S. Osalla, MIT\n'
-            'S.Y. 2026-2027')),
+            '2026')),
 
         _heading('PRIVACY'),
         _card(_body(

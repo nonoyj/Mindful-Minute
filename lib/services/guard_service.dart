@@ -90,4 +90,11 @@ class GuardService {
       _ch.invokeMethod('requestIgnoreBattery');
   static Future<void> requestAccessibility() =>
       _ch.invokeMethod('requestAccessibility');
+
+  /// Opens this app's own Usage access page (falls back to the list).
+  static Future<void> openUsageAccess() => _ch.invokeMethod('openUsageAccess');
+
+  /// Turns the accessibility lock OFF from inside the app. Returns false if
+  /// Android refused (service not running / very old phone) -> open Settings.
+  static Future<bool> disableAccessibility() => _bool('disableAccessibility');
 }

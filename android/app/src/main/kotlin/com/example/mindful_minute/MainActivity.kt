@@ -1,9 +1,11 @@
 package com.example.mindful_minute
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.provider.OpenableColumns
 import java.io.File
 import android.os.PowerManager
@@ -46,9 +48,22 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "stopMonitor" -> {
-                        MonitorService.stop(this)
+                        MonitorService.stop(this) // also removes every notification
                         result.success(null)
                     }
+                    "openUsageAccess" -> {
+                        // Opens this app's own Usage access page (Android 10+), else the list.
+                        try {
+                            startActivity(
+                                Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS,
+                                    Uri.parse("package:$packageName"))
+                            )
+                        } catch (_: Exception) {
+                            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        }
+                        result.success(null)
+                    }
+                    "disableAccessibility" -> result.success(BreakLockService.disable())
                     "cancelWarnings" -> {
                         MonitorService.cancelWarnings(this, call.argument<String>("pkg") ?: "")
                         result.success(null)
@@ -78,7 +93,13 @@ class MainActivity : FlutterActivity() {
                         result.success(enabled.contains("$packageName/"))
                     }
                     "requestAccessibility" -> {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        val cn = ComponentName(this, BreakLockService::class.java).flattenToString()
+                        val i = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                        // Asks Settings to highlight our service (ignored if unsupported).
+                        i.putExtra(":settings:fragment_args_key", cn)
+                        i.putExtra(":settings:show_fragment_args",
+                            Bundle().apply { putString(":settings:fragment_args_key", cn) })
+                        startActivity(i)
                         result.success(null)
                     }
                     else -> result.notImplemented()

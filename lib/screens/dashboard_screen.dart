@@ -115,6 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _prefs!.save();
     // Deleting a break also resets that app's usage tracking.
     await UsageService.resetApp(a.packageName);
+    await GuardService.cancelWarnings(a.packageName); // no leftover alerts
     await _applyMonitoring(turnedOn: false);
     _refresh();
   }
