@@ -10,6 +10,9 @@ import 'content_widgets.dart';
 import 'mini_games.dart';
 
 /// Runs one activity for 60 seconds (dark UI, same look as the dashboard).
+/// The 60-second timer only starts when the player presses Start.
+/// For the mini-game activity the player first PICKS a game (and can study
+/// the Research Quiz cards with no timer) before pressing Start.
 class ActivityRunnerScreen extends StatefulWidget {
   final WellnessActivityType type;
   final String? stepLabel; // e.g. "1 / 3"
@@ -36,8 +39,13 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
   bool _running = false;
   bool _done = false;
   Timer? _timer;
+  MiniGame? _game; // the mini-game the player picked
+
+  bool get _canStart =>
+      widget.type != WellnessActivityType.miniGame || _game != null;
 
   void _start() {
+    if (!_canStart) return;
     setState(() {
       _running = true;
       _remaining = kActivitySeconds;
@@ -120,11 +128,11 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
       case WellnessActivityType.reminders:
         return RemindersContent(remaining: _remaining, running: _running);
       case WellnessActivityType.miniGame:
-        return _running
-            ? const MiniGameContent(key: ValueKey('game'))
-            : const Center(
-                child: Text('Tap Start for a one-minute game',
-                    style: TextStyle(color: Pal.muted, fontSize: 16)));
+        return MiniGameContent(
+          game: _game,
+          running: _running,
+          onPick: (g) => setState(() => _game = g),
+        );
     }
   }
 
@@ -191,7 +199,8 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
               else if (_running)
                 _btn('Cancel', _cancel, secondary: true)
               else
-                _btn('Start', _start),
+                _btn(_canStart ? 'Start' : 'Pick a game to start',
+                    _canStart ? _start : null),
             ]),
           ),
         ),
@@ -199,7 +208,7 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
     );
   }
 
-  Widget _btn(String label, VoidCallback onTap, {bool secondary = false}) =>
+  Widget _btn(String label, VoidCallback? onTap, {bool secondary = false}) =>
       SizedBox(
         width: double.infinity,
         child: ElevatedButton(

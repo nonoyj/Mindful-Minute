@@ -3,50 +3,159 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../theme.dart';
 
-/// To add more games (target is ~20): write a StatefulWidget and add one
-/// entry to [miniGames]. The runner picks one at random each session.
+/// 10 games in total. The player PICKS one before pressing Start.
+/// To add a game: write a StatefulWidget and add one entry to [miniGames].
+///
+/// [preview] (optional) is shown BEFORE Start, with no timer. The Research
+/// Quiz uses it as a study screen. The 60-second timer only begins when the
+/// player presses Start in the runner.
 class MiniGame {
   final String name;
   final String instructions;
+  final IconData icon;
   final Widget Function() build;
-  const MiniGame(this.name, this.instructions, this.build);
+  final Widget Function()? preview;
+  const MiniGame(this.name, this.instructions, this.icon, this.build,
+      {this.preview});
 }
 
 final List<MiniGame> miniGames = [
-  MiniGame('Bubble Pop', 'Tap the bubbles before they vanish.', () => const _BubblePop()),
-  MiniGame('Tap in Order', 'Tap 1 to 9 in order.', () => const _TapInOrder()),
-  MiniGame('Quick Math', 'Pick the right answer.', () => const _QuickMath()),
-  MiniGame('Odd One Out', 'Find the different one.', () => const _OddOneOut()),
-  MiniGame('Memory Match', 'Match the pairs. Trains working memory.', () => const _MemoryMatch()),
-  MiniGame('Color Sequence', 'Repeat the pattern. Builds focus.', () => const _ColorSequence()),
-  MiniGame('Color vs Word', 'Tap the ink color. Trains self-control.', () => const _ColorWord()),
-  MiniGame('Gratitude Tap', 'Notice the good. Boosts mood.', () => const _Gratitude()),
-  MiniGame('Grow the Garden', 'Tap to nurture. Calm and relaxing.', () => const _Garden()),
-  MiniGame('Rhythm Ring', 'Tap with the ring. Mindful timing.', () => const _RhythmRing()),
-  MiniGame('Calm Words', 'Unscramble positive words.', () => const _CalmWords()),
-  MiniGame('Name the Feeling', 'Naming emotions helps calm them.', () => const _NameFeeling()),
-  MiniGame('Light Up', 'Light every tile. Gentle problem solving.', () => const _LightUp()),
-  MiniGame('Digit Memory', 'Remember the digits. Sharpens recall.', () => const _DigitMemory()),
-  MiniGame('Pick a Card', 'Pick a card for a kind affirmation.', () => const _PickCard()),
+  MiniGame('Research Quiz', 'Study the cards, then take a 1-minute quiz.', Icons.quiz,
+      () => const _ResearchQuiz(),
+      preview: () => const _QuizStudy()),
+  MiniGame('Bubble Pop', 'Tap the bubbles before they vanish.', Icons.bubble_chart,
+      () => const _BubblePop()),
+  MiniGame('Memory Match', 'Match the pairs. Trains working memory.', Icons.grid_view,
+      () => const _MemoryMatch()),
+  MiniGame('Color Sequence', 'Repeat the pattern. Builds focus.', Icons.palette,
+      () => const _ColorSequence()),
+  MiniGame('Color vs Word', 'Tap the ink color. Trains self-control.', Icons.text_fields,
+      () => const _ColorWord()),
+  MiniGame('Grow the Garden', 'Tap to nurture. Calm and relaxing.', Icons.local_florist,
+      () => const _Garden()),
+  MiniGame('Rhythm Ring', 'Tap with the ring. Mindful timing.', Icons.radio_button_checked,
+      () => const _RhythmRing()),
+  MiniGame('Calm Words', 'Unscramble positive words.', Icons.spellcheck,
+      () => const _CalmWords()),
+  MiniGame('Light Up', 'Light every tile. Gentle problem solving.', Icons.lightbulb_outline,
+      () => const _LightUp()),
+  MiniGame('Digit Memory', 'Remember the digits. Sharpens recall.', Icons.dialpad,
+      () => const _DigitMemory()),
 ];
 
-class MiniGameContent extends StatefulWidget {
-  const MiniGameContent({super.key});
+/// What the runner shows inside the white card for a mini-game activity.
+///  - no game picked yet  -> the picker
+///  - picked, not running -> preview (study screen for the quiz)
+///  - running             -> the game itself
+class MiniGameContent extends StatelessWidget {
+  final MiniGame? game;
+  final bool running;
+  final ValueChanged<MiniGame?> onPick;
+  const MiniGameContent({
+    super.key,
+    required this.game,
+    required this.running,
+    required this.onPick,
+  });
+
   @override
-  State<MiniGameContent> createState() => _MiniGameContentState();
+  Widget build(BuildContext context) {
+    final g = game;
+    if (g == null) return _GamePicker(onPick: onPick);
+
+    if (running) {
+      return Column(children: [
+        Text(g.name,
+            style: const TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+        Text(g.instructions,
+            textAlign: TextAlign.center, style: const TextStyle(color: Pal.muted)),
+        const SizedBox(height: 8),
+        Expanded(child: KeyedSubtree(key: ValueKey(g.name), child: g.build())),
+      ]);
+    }
+
+    return Column(children: [
+      Row(children: [
+        Icon(g.icon, color: Pal.accent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(g.name,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        ),
+        TextButton(onPressed: () => onPick(null), child: const Text('Change game')),
+      ]),
+      const SizedBox(height: 4),
+      Expanded(
+        child: g.preview != null
+            ? g.preview!()
+            : Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(g.icon, size: 64, color: Pal.accent),
+                  const SizedBox(height: 16),
+                  Text(g.instructions,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 16)),
+                  const SizedBox(height: 8),
+                  const Text('Tap Start for a one-minute game',
+                      style: TextStyle(color: Pal.muted)),
+                ]),
+              ),
+      ),
+    ]);
+  }
 }
 
-class _MiniGameContentState extends State<MiniGameContent> {
-  late final MiniGame _game = miniGames[Random().nextInt(miniGames.length)];
+class _GamePicker extends StatelessWidget {
+  final ValueChanged<MiniGame?> onPick;
+  const _GamePicker({required this.onPick});
 
   @override
   Widget build(BuildContext context) => Column(children: [
-        Text(_game.name,
-            style: TextStyle(
-                fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-        Text(_game.instructions, style: TextStyle(color: Pal.muted)),
-        const SizedBox(height: 8),
-        Expanded(child: _game.build()),
+        const Text('Choose your game',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 10),
+        Expanded(
+          child: GridView.count(
+            crossAxisCount: 2,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: 1.05,
+            children: [
+              for (var i = 0; i < miniGames.length; i++)
+                InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () => onPick(miniGames[i]),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Pal.card2,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: i == 0 ? Pal.accent : Colors.transparent, width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(miniGames[i].icon, size: 28, color: Pal.accent),
+                        const SizedBox(height: 6),
+                        Text(miniGames[i].name,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text(miniGames[i].instructions,
+                            textAlign: TextAlign.center,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 11, color: Pal.muted)),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ]);
 }
 
@@ -55,6 +164,248 @@ Widget _scoreText(int s) => Padding(
       child: Text('Score: $s',
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
     );
+
+Widget _mutedText(String t) =>
+    Text(t, textAlign: TextAlign.center, style: const TextStyle(color: Pal.muted));
+
+ButtonStyle get _neutralBtn => ElevatedButton.styleFrom(
+      backgroundColor: Pal.card2,
+      foregroundColor: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+    );
+
+// ======================================================== Research Quiz
+// A small Quizlet-style set built from the research behind Mindful Minute
+// (same studies as wellness_texts.dart and "The research behind it").
+// Please double-check the wording against the papers before publishing.
+class _QCard {
+  final String term, def;
+  const _QCard(this.term, this.def);
+}
+
+const _quizCards = [
+  _QCard('Doomscrolling',
+      'Persistently scrolling negative or distressing content and struggling to stop.'),
+  _QCard('Negativity bias',
+      'Our brains give extra weight to negative information. Bad-news feeds exploit it.'),
+  _QCard('Passive scrolling',
+      'Watching others without interacting. Linked with lower well-being than active use.'),
+  _QCard('Variable rewards',
+      'Unpredictable payoffs, like not knowing when the next great post appears. The most habit-forming kind.'),
+  _QCard('Bedtime procrastination',
+      'Going to sleep later than planned for no outside reason.'),
+  _QCard('If-then plan',
+      'Example: "If I feel the urge to scroll, then I will stand up." Makes follow-through more likely.'),
+  _QCard('Urge surfing',
+      'Urges rise, peak and fade within minutes if you do not act on them.'),
+  _QCard('Slow breathing',
+      'About six breaths a minute can raise heart-rate variability, a marker of calm.'),
+  _QCard('Task-switch cost',
+      'After an interruption it can take roughly 23 minutes to fully return to the task.'),
+  _QCard('Procrastination',
+      'Largely an emotion-regulation problem: we avoid tasks to escape bad feelings.'),
+  _QCard('Attrition',
+      'About a quarter (24.7%) of participants drop out of mindfulness app trials.'),
+  _QCard('30-minute limit',
+      'Limiting social media to about 30 minutes a day reduced loneliness and depression.'),
+];
+
+/// STUDY phase: no timer. Flip through the flashcards as long as you like.
+class _QuizStudy extends StatefulWidget {
+  const _QuizStudy();
+  @override
+  State<_QuizStudy> createState() => _QuizStudyState();
+}
+
+class _QuizStudyState extends State<_QuizStudy> {
+  late List<_QCard> _deck = List.of(_quizCards);
+  int _i = 0;
+  bool _back = false;
+
+  void _go(int d) => setState(() {
+        _i = (_i + d).clamp(0, _deck.length - 1);
+        _back = false;
+      });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _deck[_i];
+    return Column(children: [
+      _mutedText('Study and memorize. There is no timer yet. '
+          'Your 1-minute quiz starts when you tap Start.'),
+      const SizedBox(height: 10),
+      Expanded(
+        child: GestureDetector(
+          onTap: () => setState(() => _back = !_back),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: Container(
+              key: ValueKey('$_i-$_back'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _back ? Pal.accent.withValues(alpha: 0.15) : Pal.card2,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Pal.accent.withValues(alpha: 0.4)),
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(_back ? 'DEFINITION' : 'TERM',
+                        style: const TextStyle(
+                            color: Pal.accent,
+                            fontSize: 11,
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 14),
+                    Text(_back ? c.def : c.term,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: _back ? 18 : 28,
+                            height: 1.35,
+                            fontWeight: _back ? FontWeight.w400 : FontWeight.w700)),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      const SizedBox(height: 6),
+      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        IconButton(
+            onPressed: _i > 0 ? () => _go(-1) : null,
+            icon: const Icon(Icons.arrow_back)),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('${_i + 1} / ${_deck.length}',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          TextButton.icon(
+            onPressed: () => setState(() {
+              _deck = List.of(_quizCards)..shuffle();
+              _i = 0;
+              _back = false;
+            }),
+            icon: const Icon(Icons.shuffle, size: 16),
+            label: const Text('Shuffle'),
+          ),
+        ]),
+        IconButton(
+            onPressed: _i < _deck.length - 1 ? () => _go(1) : null,
+            icon: const Icon(Icons.arrow_forward)),
+      ]),
+      const Text('Tap the card to flip it',
+          style: TextStyle(color: Pal.muted, fontSize: 12)),
+    ]);
+  }
+}
+
+/// QUIZ phase: runs inside the runner's 60-second timer.
+/// Shows a definition, pick the matching term (Quizlet "Learn" style).
+class _ResearchQuiz extends StatefulWidget {
+  const _ResearchQuiz();
+  @override
+  State<_ResearchQuiz> createState() => _ResearchQuizState();
+}
+
+class _ResearchQuizState extends State<_ResearchQuiz> {
+  final _r = Random();
+  late final List<_QCard> _order = List.of(_quizCards)..shuffle(_r);
+  int _q = 0, _score = 0;
+  List<_QCard> _opts = [];
+  _QCard? _picked;
+
+  _QCard get _cur => _order[_q % _order.length];
+
+  @override
+  void initState() {
+    super.initState();
+    _newOptions();
+  }
+
+  void _newOptions() {
+    final cur = _cur;
+    final others = List.of(_quizCards)
+      ..remove(cur)
+      ..shuffle(_r);
+    _opts = [cur, ...others.take(3)]..shuffle(_r);
+    _picked = null;
+  }
+
+  void _answer(_QCard c) {
+    if (_picked != null) return;
+    final ok = c == _cur;
+    setState(() {
+      _picked = c;
+      if (ok) _score++;
+    });
+    Future.delayed(Duration(milliseconds: ok ? 600 : 1400), () {
+      if (!mounted) return;
+      setState(() {
+        _q++;
+        if (_q % _order.length == 0) _order.shuffle(_r);
+        _newOptions();
+      });
+    });
+  }
+
+  Color _bg(_QCard o) {
+    if (_picked == null) return Pal.card2;
+    if (o == _cur) return Pal.accent;
+    if (o == _picked) return Pal.danger;
+    return Pal.card2;
+  }
+
+  Color _fg(_QCard o) {
+    if (_picked != null && o == _cur) return Colors.black;
+    return Colors.white;
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(children: [
+        _scoreText(_score),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: Pal.card2, borderRadius: BorderRadius.circular(16)),
+                child: Column(children: [
+                  const Text('WHICH TERM MATCHES?',
+                      style: TextStyle(
+                          color: Pal.accent,
+                          fontSize: 11,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Text(_cur.def,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 17, height: 1.35)),
+                ]),
+              ),
+              const SizedBox(height: 12),
+              for (final o in _opts)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () => _answer(o),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _bg(o),
+                        foregroundColor: _fg(o),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(o.term, style: const TextStyle(fontSize: 16)),
+                    ),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ]);
+}
 
 // ------------------------------------------------------------- Bubble Pop
 class _B {
@@ -126,165 +477,6 @@ class _BubblePopState extends State<_BubblePop> {
         ),
       ]);
 }
-
-// ------------------------------------------------------------ Tap in Order
-class _TapInOrder extends StatefulWidget {
-  const _TapInOrder();
-  @override
-  State<_TapInOrder> createState() => _TapInOrderState();
-}
-
-class _TapInOrderState extends State<_TapInOrder> {
-  List<int> _order = List.generate(9, (i) => i + 1)..shuffle();
-  int _next = 1;
-  int _rounds = 0;
-
-  void _tap(int n) {
-    if (n != _next) return;
-    setState(() {
-      _next++;
-      if (_next > 9) {
-        _rounds++;
-        _next = 1;
-        _order = List.generate(9, (i) => i + 1)..shuffle();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _scoreText(_rounds),
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 3,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
-            children: [
-              for (final n in _order)
-                ElevatedButton(
-                  onPressed: n < _next ? null : () => _tap(n),
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: Pal.accent, foregroundColor: Colors.black),
-                  child: Text('$n', style: const TextStyle(fontSize: 28)),
-                ),
-            ],
-          ),
-        ),
-      ]);
-}
-
-// -------------------------------------------------------------- Quick Math
-class _QuickMath extends StatefulWidget {
-  const _QuickMath();
-  @override
-  State<_QuickMath> createState() => _QuickMathState();
-}
-
-class _QuickMathState extends State<_QuickMath> {
-  final _r = Random();
-  int _a = 0, _b = 0, _score = 0;
-  List<int> _opts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _newQ();
-  }
-
-  void _newQ() {
-    _a = _r.nextInt(20) + 1;
-    _b = _r.nextInt(20) + 1;
-    final ans = _a + _b;
-    final s = <int>{ans};
-    while (s.length < 3) {
-      s.add(ans + _r.nextInt(7) - 3);
-    }
-    _opts = s.toList()..shuffle();
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _scoreText(_score),
-        const Spacer(),
-        Text('$_a + $_b = ?',
-            style: TextStyle(fontSize: 44, color: Colors.white)),
-        const SizedBox(height: 24),
-        Wrap(spacing: 12, children: [
-          for (final o in _opts)
-            ElevatedButton(
-              onPressed: () => setState(() {
-                if (o == _a + _b) _score++;
-                _newQ();
-              }),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Pal.accent, foregroundColor: Colors.black),
-              child: Text('$o', style: const TextStyle(fontSize: 24)),
-            ),
-        ]),
-        const Spacer(),
-      ]);
-}
-
-// ------------------------------------------------------------ Odd One Out
-class _OddOneOut extends StatefulWidget {
-  const _OddOneOut();
-  @override
-  State<_OddOneOut> createState() => _OddOneOutState();
-}
-
-class _OddOneOutState extends State<_OddOneOut> {
-  static const _pairs = [
-    ['🌿', '🍃'], ['🐟', '🐠'], ['🌸', '🌼'], ['🌙', '🌛'], ['🐢', '🐊'],
-  ];
-  final _r = Random();
-  int _odd = 0, _score = 0;
-  late List<String> _pair;
-
-  @override
-  void initState() {
-    super.initState();
-    _newRound();
-  }
-
-  void _newRound() {
-    _pair = List<String>.from(_pairs[_r.nextInt(_pairs.length)]);
-    if (_r.nextBool()) _pair = _pair.reversed.toList();
-    _odd = _r.nextInt(16);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _scoreText(_score),
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 4,
-            children: [
-              for (var i = 0; i < 16; i++)
-                InkWell(
-                  onTap: () {
-                    if (i == _odd) setState(() { _score++; _newRound(); });
-                  },
-                  child: Center(
-                    child: Text(i == _odd ? _pair[1] : _pair[0],
-                        style: const TextStyle(fontSize: 34)),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ]);
-}
-
-// ============================================================ NEW GAMES (5-15)
-
-Widget _mutedText(String t) =>
-    Text(t, textAlign: TextAlign.center, style: const TextStyle(color: Pal.muted));
-
-ButtonStyle get _neutralBtn => ElevatedButton.styleFrom(
-      backgroundColor: Pal.card2,
-      foregroundColor: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-    );
 
 // ------------------------------------------------------------ Memory Match
 class _MemoryMatch extends StatefulWidget {
@@ -499,60 +691,6 @@ class _ColorWordState extends State<_ColorWord> {
       ]);
 }
 
-// -------------------------------------------------------------- Gratitude
-class _Gratitude extends StatefulWidget {
-  const _Gratitude();
-  @override
-  State<_Gratitude> createState() => _GratitudeState();
-}
-
-class _GratitudeState extends State<_Gratitude> {
-  static const _items = [
-    ('👪', 'Family'), ('🧑‍🤝‍🧑', 'Friends'), ('💪', 'Health'),
-    ('☀️', 'Sunshine'), ('🎵', 'Music'), ('🍲', 'Food'),
-    ('🏠', 'Home'), ('🐾', 'Pets'), ('📚', 'Learning'),
-  ];
-  final Set<int> _sel = {};
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _mutedText('Tap what you feel grateful for today'),
-        const SizedBox(height: 8),
-        Expanded(
-          child: GridView.count(
-            crossAxisCount: 3,
-            children: [
-              for (var i = 0; i < _items.length; i++)
-                InkWell(
-                  onTap: () => setState(() {
-                    if (!_sel.remove(i)) _sel.add(i);
-                  }),
-                  child: Container(
-                    margin: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: _sel.contains(i)
-                          ? Pal.accent.withValues(alpha: 0.3)
-                          : Pal.card2,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                          color: _sel.contains(i) ? Pal.accent : Colors.transparent),
-                    ),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Text(_items[i].$1, style: const TextStyle(fontSize: 30)),
-                      const SizedBox(height: 4),
-                      Text(_items[i].$2, style: const TextStyle(fontSize: 12)),
-                    ]),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        _mutedText(_sel.isEmpty
-            ? ''
-            : '${_sel.length} good thing${_sel.length > 1 ? 's' : ''}. Notice how that feels.'),
-      ]);
-}
-
 // ------------------------------------------------------------ Grow Garden
 class _Garden extends StatefulWidget {
   const _Garden();
@@ -751,62 +889,6 @@ class _CalmWordsState extends State<_CalmWords> {
       ]);
 }
 
-// -------------------------------------------------------- Name the Feeling
-class _NameFeeling extends StatefulWidget {
-  const _NameFeeling();
-  @override
-  State<_NameFeeling> createState() => _NameFeelingState();
-}
-
-class _NameFeelingState extends State<_NameFeeling> {
-  static const _f = [
-    ('😊', 'Happy'), ('😢', 'Sad'), ('😠', 'Angry'), ('😰', 'Anxious'),
-    ('😌', 'Calm'), ('😴', 'Tired'), ('😮', 'Surprised'), ('🤩', 'Excited'),
-  ];
-  final _r = Random();
-  int _cur = 0, _score = 0;
-  List<int> _opts = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _new();
-  }
-
-  void _new() {
-    _cur = _r.nextInt(_f.length);
-    final s = <int>{_cur};
-    while (s.length < 3) {
-      s.add(_r.nextInt(_f.length));
-    }
-    _opts = s.toList()..shuffle(_r);
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _scoreText(_score),
-        const Spacer(),
-        Text(_f[_cur].$1, style: const TextStyle(fontSize: 90)),
-        const SizedBox(height: 8),
-        _mutedText('Which feeling is this?'),
-        const Spacer(),
-        Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center, children: [
-          for (final o in _opts)
-            ElevatedButton(
-              style: _neutralBtn,
-              onPressed: () => setState(() {
-                if (o == _cur) _score++;
-                _new();
-              }),
-              child: Text(_f[o].$2, style: const TextStyle(fontSize: 18)),
-            ),
-        ]),
-        const SizedBox(height: 12),
-        _mutedText('Naming a feeling helps calm it.'),
-        const SizedBox(height: 8),
-      ]);
-}
-
 // ---------------------------------------------------------------- Light Up
 class _LightUp extends StatefulWidget {
   const _LightUp();
@@ -955,84 +1037,5 @@ class _DigitMemoryState extends State<_DigitMemory> {
             ],
           ),
         ),
-      ]);
-}
-
-// -------------------------------------------------------------- Pick a Card
-class _PickCard extends StatefulWidget {
-  const _PickCard();
-  @override
-  State<_PickCard> createState() => _PickCardState();
-}
-
-class _PickCardState extends State<_PickCard> {
-  static const _aff = [
-    'I am doing my best, and that is enough.',
-    'I can take this one step at a time.',
-    "My worth is not measured by productivity.",
-    'I choose calm over chaos.',
-    'This feeling will pass.',
-    'I am allowed to rest.',
-    'I can begin again at any moment.',
-    'I am present and I am capable.',
-    "I let go of what I can't control.",
-    'I deserve kindness, especially from myself.',
-    'Small progress is still progress.',
-    'I am more than my worries.',
-  ];
-  final _r = Random();
-  late List<String> _texts;
-  int _open = -1, _score = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _deal();
-  }
-
-  void _deal() {
-    _texts = (List.of(_aff)..shuffle(_r)).take(3).toList();
-    _open = -1;
-  }
-
-  @override
-  Widget build(BuildContext context) => Column(children: [
-        _scoreText(_score),
-        _mutedText('Pick a card'),
-        const SizedBox(height: 8),
-        Expanded(
-          child: Row(children: [
-            for (var i = 0; i < 3; i++)
-              Expanded(
-                child: InkWell(
-                  onTap: () => setState(() {
-                    if (_open == -1) {
-                      _open = i;
-                      _score++;
-                    }
-                  }),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    margin: const EdgeInsets.all(6),
-                    padding: const EdgeInsets.all(8),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _open == i ? Pal.accent.withValues(alpha: 0.25) : Pal.card2,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Text(_open == i ? _texts[i] : '✨',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: _open == i ? 15 : 36)),
-                  ),
-                ),
-              ),
-          ]),
-        ),
-        if (_open != -1)
-          ElevatedButton(
-            style: _neutralBtn,
-            onPressed: () => setState(_deal),
-            child: const Text('New cards'),
-          ),
       ]);
 }

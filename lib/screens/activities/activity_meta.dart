@@ -18,7 +18,7 @@ extension WellnessActivityMeta on WellnessActivityType {
       case WellnessActivityType.breathing:
         return 'Follow the circle for one minute.';
       case WellnessActivityType.miniGame:
-        return '15 mind-friendly games, one each break.';
+        return '10 games, including a research quiz. You pick one each break.';
       case WellnessActivityType.reminders:
         return 'Calming scenes, music, quotes, research and tips.';
     }

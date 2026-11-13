@@ -643,7 +643,19 @@ class AboutScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('About')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const SizedBox(height: 8),
-        const Center(child: Icon(Icons.self_improvement, size: 72, color: Pal.accent)),
+        Center(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.asset(
+              'assets/logo.png',
+              width: 96,
+              height: 96,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+              const Icon(Icons.self_improvement, size: 72, color: Pal.accent),
+            ),
+          ),
+        ),
         const SizedBox(height: 12),
         const Center(
           child: Text('Mindful Minute',
