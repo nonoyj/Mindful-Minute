@@ -8,11 +8,12 @@ import '../theme.dart';
 const String kAppVersion = '1.0.0';
 const String kFeedbackEmail = 'delacruzjrome3@gmail.com';
 
-const List<(String, String)> kDevelopers = [
-  ("J'rome A. De La Cruz", 'Lead Developer'),
-  ('Dale M. Misajon', 'Project Manager'),
-  ('Phenaeus Walter F. Gavilla', 'Documentation'),
-  ('Carl Luis L. Malan', 'UI/UX Designer'),
+//dev-team
+const List<(String, String, String)> kDevelopers = [
+  ("J'rome A. De La Cruz", 'Lead Developer', 'assets/team/jrome.jpg'),
+  ('Dale M. Misajon', 'Project Manager', 'assets/team/dale.jpg'),
+  ('Phenaeus Walter F. Gavilla', 'Documentation', 'assets/team/phenaeus.jpg'),
+  ('Carl Luis L. Malan', 'UI/UX Designer', 'assets/team/carl.jpg'),
 ];
 
 Widget _heading(String t) => Padding(
@@ -787,14 +788,27 @@ class AboutScreen extends StatelessWidget {
 
         _heading('PROJECT TEAM'),
         _card(Column(children: [
-          for (final (name, role) in kDevelopers)
+          for (final (name, role, photo) in kDevelopers)
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
+                radius: 24,
                 backgroundColor: Pal.accent,
                 foregroundColor: Colors.black,
-                child: Text(name.substring(0, 1),
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
+                child: ClipOval(
+                  child: Image.asset(
+                    photo,
+                    width: 48,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
+                    // Falls back to the initial if the photo is missing
+                    errorBuilder: (_, __, ___) => Text(
+                      name.substring(0, 1),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
               ),
               title: Text(name),
               subtitle: Text(role),
