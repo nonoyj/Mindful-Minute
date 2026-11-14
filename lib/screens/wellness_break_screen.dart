@@ -1,21 +1,23 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/user_preferences.dart';
 import '../services/guard_service.dart';
 import '../services/usage_service.dart';
 import '../theme.dart';
+import 'activities/activity_music.dart';
 import 'activities/activity_runner.dart';
 
 enum _Stage { ring, activity, done }
 
 /// "You've reached your limit" screen + the sequence of activities.
 ///
-/// locked == true  : real break. Native lock keeps the phone here, music plays
-///                   on the ring screen, and finishing everything resets the
-///                   app's limit and unlocks the phone.
-/// locked == false : preview from the editor (no lock, no music).
+/// V2 behaviour
+/// locked == true  : real break. You may leave at any time (Back or
+///                   "Not now"), which sends you Home. The monitored app
+///                   stays BLOCKED: opening it again brings you back here.
+///                   Finishing every activity unblocks it and resets its limit.
+/// locked == false : preview from the editor (nothing is blocked/unblocked).
 class WellnessBreakScreen extends StatefulWidget {
   final MonitoredApp app;
   final bool locked;
@@ -25,20 +27,25 @@ class WellnessBreakScreen extends StatefulWidget {
   State<WellnessBreakScreen> createState() => _WellnessBreakScreenState();
 }
 
-class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
+class _WellnessBreakScreenState extends State<WellnessBreakScreen>
+    with WidgetsBindingObserver {
   _Stage _stage = _Stage.ring;
   int _i = 0;
   DateTime _now = DateTime.now();
   Timer? _clock;
+  bool _activityRunning = false; // true only while the 60 s timer runs
+  bool _inForeground = true; // music only plays while the app is on screen
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final fg = state == AppLifecycleState.resumed;
+    if (fg != _inForeground) setState(() => _inForeground = fg);
+  }
 
   @override
   void initState() {
     super.initState();
-    if (widget.locked) {
-      // Hide status + navigation bars (a swipe only reveals them briefly).
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      GuardService.setMusic(true);
-    }
+    WidgetsBinding.instance.addObserver(this);
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
@@ -46,25 +53,34 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
 
   @override
   void dispose() {
+    if (widget.locked) GuardService.setActivityLock(false);
+    WidgetsBinding.instance.removeObserver(this);
     _clock?.cancel();
-    if (widget.locked) {
-      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    }
     super.dispose();
   }
 
-  void _startBreak() {
-    if (widget.locked) GuardService.setMusic(false); // music pauses during activities
-    setState(() {
-      _i = 0;
-      _stage = _Stage.activity;
-    });
+  void _startBreak() => setState(() {
+        _i = 0;
+        _stage = _Stage.activity;
+      });
+
+  /// The activity timer started/stopped. While it runs the user cannot leave.
+  void _onRunning(bool running) {
+    if (widget.locked) GuardService.setActivityLock(running);
+    if (mounted) setState(() => _activityRunning = running);
   }
 
+  /// Cancel = emergency exit: back to the limit screen, where leaving is
+  /// allowed again. The app stays blocked either way.
   void _cancelBreak() {
-    // Cancelled mid-break -> back to the limit screen, music resumes.
-    if (widget.locked) GuardService.setMusic(true);
+    _onRunning(false);
     setState(() => _stage = _Stage.ring);
+  }
+
+  /// Leave without finishing: the app stays blocked.
+  void _leave() {
+    if (mounted) Navigator.of(context).pop();
+    if (widget.locked) GuardService.goHome();
   }
 
   Future<void> _next() async {
@@ -73,9 +89,9 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
       setState(() => _i++);
       return;
     }
-    // All activities finished: unlock, stop music, reset this app's limit.
+    // All activities finished: unblock the app and reset its limit.
     if (widget.locked) {
-      await GuardService.stop();
+      await GuardService.unblock(widget.app.packageName);
       await UsageService.resetApp(widget.app.packageName);
       await GuardService.cancelWarnings(widget.app.packageName);
     }
@@ -98,7 +114,8 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
           key: ValueKey('act$_i'),
           type: acts[_i],
           stepLabel: '${_i + 1} / ${acts.length}',
-          locked: widget.locked,
+          locked: widget.locked && _activityRunning, // no back arrow while running
+          onRunningChanged: _onRunning,
           onComplete: _next,
           onCancel: _cancelBreak,
           doneLabel: _i == acts.length - 1 ? 'Finish' : 'Next',
@@ -111,14 +128,34 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
         body = _ringView();
         break;
     }
-    return PopScope(canPop: !widget.locked || _stage == _Stage.done, child: body);
+    final canPop = !widget.locked || _stage == _Stage.done;
+    return PopScope(
+      canPop: canPop,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_stage == _Stage.activity) {
+          if (_activityRunning) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(const SnackBar(
+                  content: Text('Tap Cancel first if you need to leave.')));
+          } else {
+            _cancelBreak(); // activity not started yet: back to the limit screen
+          }
+        } else {
+          _leave(); // limit screen: Back = Home, the app stays blocked
+        }
+      },
+      child: body,
+    );
   }
 
   Widget _ringView() {
     final acts = widget.app.activities;
     final h = _now.hour % 12 == 0 ? 12 : _now.hour % 12;
     final m = _now.minute.toString().padLeft(2, '0');
-    return Scaffold(
+    final count = '${acts.length} ${acts.length == 1 ? 'activity' : 'activities'}';
+    final screen = Scaffold(
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -150,7 +187,10 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                '${acts.length} ${acts.length == 1 ? 'activity' : 'activities'} to complete',
+                widget.locked
+                    ? '${widget.app.displayName} stays blocked until you finish $count'
+                    : '$count to complete',
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70),
               ),
               const Spacer(),
@@ -168,18 +208,25 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
                   child: const Text('Start Wellness Break'),
                 ),
               ),
-              if (!widget.locked)
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close preview',
-                      style: TextStyle(color: Colors.white70)),
-                ),
+              TextButton(
+                onPressed: _leave,
+                child: Text(widget.locked ? 'Not now, take me home' : 'Close preview',
+                    style: const TextStyle(color: Colors.white70)),
+              ),
               const SizedBox(height: 8),
             ]),
           ),
         ),
       ),
     );
+    // Limit-screen song: loops on this screen only (real breaks, not previews).
+    // It stops when the activities start (each has its own song) and starts
+    // again if you cancel back here, because this view is rebuilt.
+    if (!widget.locked) return screen;
+    return Stack(fit: StackFit.expand, children: [
+      screen,
+      MusicLayer(asset: 'audio/limit_screen.mp3', running: _inForeground),
+    ]);
   }
 
   Widget _doneView() => Scaffold(
@@ -195,7 +242,7 @@ class _WellnessBreakScreenState extends State<WellnessBreakScreen> {
                 const SizedBox(height: 8),
                 Text(
                   widget.locked
-                      ? "You're free. Your ${widget.app.displayName} limit has been reset."
+                      ? '${widget.app.displayName} is unlocked and its limit has been reset.'
                       : 'Preview finished.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Pal.muted),

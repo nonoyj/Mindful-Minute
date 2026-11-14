@@ -6,7 +6,8 @@ import 'guard_service.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Opens the LOCKED wellness break (the 100% alert).
+/// Opens the wellness break for a BLOCKED app (V2: the user may leave, but the
+/// app stays blocked until the activities are finished).
 class BreakLauncher {
   static bool _open = false;
 
@@ -17,12 +18,10 @@ class BreakLauncher {
   }
 
   /// Called on cold start and every time the app returns to the foreground:
-  /// if the native lock is armed, make sure the break screen is showing.
+  /// if the native side flagged a blocked app that was opened, show its break.
   static Future<void> checkGuard() async {
-    if (await GuardService.isActive()) {
-      final pkg = await GuardService.activePackage();
-      if (pkg != null) await openBreakFor(pkg);
-    }
+    final pkg = await GuardService.takePendingBreak();
+    if (pkg != null) await openBreakFor(pkg);
   }
 
   static Future<void> openBreakFor(String packageName) async {
@@ -37,6 +36,9 @@ class BreakLauncher {
     }
     app ??= MonitoredApp(
         packageName: packageName, displayName: 'your app', dailyLimitMinutes: 0);
+
+    // Safety net: make sure the app is on the blocked list.
+    await GuardService.block(packageName);
 
     _open = true;
     try {

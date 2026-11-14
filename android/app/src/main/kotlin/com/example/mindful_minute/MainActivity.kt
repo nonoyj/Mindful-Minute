@@ -20,6 +20,14 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "mindful/guard")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "goHome" -> {
+                        startActivity(
+                            Intent(Intent.ACTION_MAIN)
+                                .addCategory(Intent.CATEGORY_HOME)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                        result.success(true)
+                    }
                     "hasOverlay" -> result.success(Settings.canDrawOverlays(this))
                     "requestOverlay" -> {
                         startActivity(

@@ -135,7 +135,7 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         ),
         _perm(
           title: 'Display over other apps',
-          sub: 'Lets the break reopen on top of any app or the home screen.',
+          sub: 'Lets the break appear on top when you open a blocked app.',
           on: _overlay,
           set: (v) => _overlay = v,
           turnOn: GuardService.requestOverlay,
@@ -144,8 +144,8 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         ),
         _perm(
           title: 'Accessibility: "Mindful Minute lock"',
-          sub: 'Closes the notification shade, blocks Home / Recents instantly and '
-              'keeps the break music volume up.',
+          sub: 'Detects when you open a blocked app so the break can appear. '
+              'It cannot read your screen.',
           on: _acc,
           set: (v) => _acc = v,
           turnOn: () async {
@@ -175,17 +175,18 @@ class _SettingsScreenState extends State<SettingsScreen> with WidgetsBindingObse
         _link(Icons.feedback_outlined, 'Send feedback', const FeedbackScreen()),
         _link(Icons.info_outline, 'About', const AboutScreen()),
         const SizedBox(height: 20),
-        const Text('How the lock works',
+        const Text('How blocking works',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
         const Text(
-          'When an app reaches 100% of its limit, calming music starts and '
-          'Mindful Minute takes over the screen. Home, Recents, the status bar '
-          'and the power button all lead straight back to it. The only way out '
-          'is to finish every activity you chose. Then the music stops, the '
-          "app's limit resets and you are free.\n\n"
-          'Safety: calls still come through, and the lock releases by itself '
-          'after 10 minutes so you can never be stuck out of your phone.',
+          'When an app reaches 100% of its limit, Mindful Minute shows your '
+          'break. You can leave and use the rest of your phone normally, but '
+          'that app stays blocked: every time you open it, you are brought '
+          'back to the break. Finish all the activities you chose and the '
+          "app's limit resets and it unlocks.\n\n"
+          'Safety: only the monitored app is affected. Calls, Home and every '
+          'other app always work, and you can switch a break off or delete it '
+          'at any time to unblock its app.',
           style: TextStyle(color: Pal.muted, height: 1.4),
         ),
       ]),

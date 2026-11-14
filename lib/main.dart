@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'screens/dashboard_screen.dart';
@@ -38,32 +37,28 @@ class RootNavigation extends StatefulWidget {
 
 class _RootNavigationState extends State<RootNavigation> with WidgetsBindingObserver {
   int _index = 0;
-  Timer? _guardTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _guardTimer = Timer.periodic(
-        const Duration(seconds: 2), (_) => BreakLauncher.checkGuard());
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Launched by a notification tap?
       BreakLauncher.handlePayload(await NotificationService.launchPayload());
-      // Launched by the native lock (break in progress)?
+      // Launched because a blocked app was opened?
       BreakLauncher.checkGuard();
     });
   }
 
   @override
   void dispose() {
-    _guardTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // The native guard brings us to the front: re-open the break if needed.
+    // The native side brings us to the front when a blocked app is opened.
     if (state == AppLifecycleState.resumed) BreakLauncher.checkGuard();
   }
 

@@ -25,6 +25,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   UserPreferences? _prefs;
   Map<String, int> _usage = {};
+  Set<String> _blocked = {};
   int _missing = 0;
   int _total = 0;
   int _streak = 0;
@@ -57,33 +58,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ? await UsageService.getTodayUsageForApps(
             prefs.monitoredApps.map((a) => a.packageName).toList())
         : <String, int>{};
+    final blocked = await GuardService.blockedPackages();
     final stats = await SessionService.load();
     if (!mounted) return;
     setState(() {
       _prefs = prefs;
       _usage = usage;
+      _blocked = blocked;
       _missing = (access ? 0 : 1) + (overlay ? 0 : 1) + (acc ? 0 : 1);
       _total = stats.total;
       _streak = stats.streak;
     });
   }
 
-  void _snack(String message, String tier) {
-    if (!mounted) return;
-    final color = {
-          'seventy': Colors.amber.shade800,
-          'eighty': Colors.orange.shade800,
-          'ninety': Colors.deepOrange.shade800,
-        }[tier] ??
-        Pal.card2;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: color,
-      duration: const Duration(seconds: 5),
-    ));
+  /// A blocked app cannot be edited, switched off or deleted until its break
+  /// is finished. Returns true (and explains why) when the action is refused.
+  bool _refuseIfBlocked(MonitoredApp a) {
+    if (!_blocked.contains(a.packageName)) return false;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('${a.displayName} is blocked. Finish its wellness break '
+            'to unlock it.'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Open break',
+          onPressed: () => BreakLauncher.openBreakFor(a.packageName),
+        ),
+      ));
+    return true;
   }
 
   Future<void> _edit(MonitoredApp? existing) async {
+    if (existing != null && _refuseIfBlocked(existing)) return;
     final prefs = _prefs;
     if (prefs == null) return;
     final taken = prefs.monitoredApps.map((a) => a.packageName).toSet();
@@ -102,8 +109,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// Switch on/off. Turning a break ON starts its tracking from 0 again.
+  /// Turning it OFF also unblocks the app (never leave an app stuck blocked).
   Future<void> _update(MonitoredApp a) async {
+    if (_refuseIfBlocked(a)) return;
     if (a.enabled) await UsageService.resetApp(a.packageName);
+    if (!a.enabled) await GuardService.unblock(a.packageName);
     _prefs!.addOrUpdateApp(a);
     await _prefs!.save();
     await _applyMonitoring(turnedOn: a.enabled);
@@ -111,10 +121,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _delete(MonitoredApp a) async {
+    if (_refuseIfBlocked(a)) return;
     _prefs!.removeApp(a.packageName);
     await _prefs!.save();
-    // Deleting a break also resets that app's usage tracking.
+    // Deleting a break also resets that app's usage tracking and unblocks it.
     await UsageService.resetApp(a.packageName);
+    await GuardService.unblock(a.packageName);
     await GuardService.cancelWarnings(a.packageName); // no leftover alerts
     await _applyMonitoring(turnedOn: false);
     _refresh();
@@ -147,6 +159,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     MonitoredApp? best;
     var bestLeft = 1 << 30;
     for (final a in apps) {
+      if (_blocked.contains(a.packageName)) {
+        return '${a.displayName}: blocked';
+      }
       final left = a.dailyLimitMinutes - (_usage[a.packageName] ?? 0);
       if (left < bestLeft) {
         bestLeft = left;
@@ -213,7 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: Text(
                           'Finish setup ($_missing): allow permissions so breaks can '
-                          'track usage and lock the screen.',
+                          'track usage and block apps.',
                           style: const TextStyle(fontSize: 13)),
                     ),
                     const Icon(Icons.chevron_right),
@@ -243,6 +258,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final used = _usage[a.packageName] ?? 0;
     final f = a.dailyLimitMinutes <= 0 ? 0.0 : used / a.dailyLimitMinutes;
     final dim = a.enabled ? 1.0 : 0.5;
+    final blocked = a.enabled && _blocked.contains(a.packageName);
     return Opacity(
       opacity: dim,
       child: InkWell(
@@ -280,9 +296,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 value: a.enabled,
                 activeThumbColor: Colors.white,
                 activeTrackColor: Pal.accent,
-                onChanged: (v) => _update(a.copyWith(enabled: v)),
+                onChanged:
+                    blocked ? null : (v) => _update(a.copyWith(enabled: v)),
               ),
               PopupMenuButton<String>(
+                enabled: !blocked,
                 onSelected: (v) => v == 'edit' ? _edit(a) : _delete(a),
                 itemBuilder: (_) => const [
                   PopupMenuItem(value: 'edit', child: Text('Edit')),
@@ -295,12 +313,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
               value: math.min(1.0, f),
               minHeight: 6,
               backgroundColor: Pal.card2,
-              color: _barColor(f),
+              color: blocked ? Colors.red.shade400 : _barColor(f),
               borderRadius: BorderRadius.circular(6),
             ),
             const SizedBox(height: 6),
-            Text('$used / ${a.dailyLimitMinutes} min today',
-                style: const TextStyle(fontSize: 12, color: Pal.muted)),
+            Row(children: [
+              Expanded(
+                child: Text('$used / ${a.dailyLimitMinutes} min today',
+                    style: const TextStyle(fontSize: 12, color: Pal.muted)),
+              ),
+              if (blocked)
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.block, size: 14, color: Colors.red.shade300),
+                  const SizedBox(width: 4),
+                  Text('Blocked until you finish the break',
+                      style: TextStyle(fontSize: 12, color: Colors.red.shade300)),
+                ]),
+            ]),
             const SizedBox(height: 10),
             Row(children: [
               const Text('Break', style: TextStyle(color: Pal.muted)),

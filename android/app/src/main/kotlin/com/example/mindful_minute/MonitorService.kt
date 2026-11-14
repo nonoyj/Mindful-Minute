@@ -25,7 +25,7 @@ import kotlin.math.roundToInt
  * Native, sticky foreground service that watches your monitored apps.
  * It does NOT depend on the Flutter UI, so it keeps working after you close
  * (swipe away) the app. It reads the same settings the app saves, warns at
- * 70/80/90/100% and at 100% arms the wellness-break lock (BreakGuard).
+ * 70/80/90/100% and at 100% blocks that app (BreakGuard) and opens its wellness break.
  */
 class MonitorService : Service() {
 
@@ -280,14 +280,10 @@ class MonitorService : Service() {
         return String.format("%04d-%02d-%02d", c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, c.get(Calendar.DAY_OF_MONTH))
     }
 
-    /** At 100%: lock the phone into the wellness break (see BreakGuard). */
+    /** At 100%: block the app and open its break once (user may leave; app stays blocked). */
     private fun armBreak(sp: android.content.SharedPreferences, pkg: String) {
-        sp.edit()
-            .putString("flutter.guard_pkg", pkg)
-            .putLong("flutter.guard_started_at", System.currentTimeMillis())
-            .putBoolean("flutter.guard_music", true)
-            .putBoolean("flutter.guard_active", true)
-            .apply()
+        BreakGuard.block(this, pkg)
+        BreakGuard.openBreak(this, pkg)
     }
 
     // --------------------------------------------------------- notifications

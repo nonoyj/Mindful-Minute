@@ -10,15 +10,17 @@ import 'content_widgets.dart';
 import 'mini_games.dart';
 
 /// Runs one activity for 60 seconds (dark UI, same look as the dashboard).
-/// The 60-second timer only starts when the player presses Start.
-/// For the mini-game activity the player first PICKS a game (and can study
-/// the Research Quiz cards with no timer) before pressing Start.
+///
+/// NOTE: this is a reconstruction written against your current
+/// mini_games.dart (game picker). Compare it with your own file in git and
+/// keep any extra changes you made there.
 class ActivityRunnerScreen extends StatefulWidget {
   final WellnessActivityType type;
   final String? stepLabel; // e.g. "1 / 3"
-  final bool locked; // real break: no back button
+  final bool locked; // true while running in a real break: no back button
   final VoidCallback? onComplete; // Next / Finish pressed
   final VoidCallback? onCancel; // Cancel pressed while running
+  final ValueChanged<bool>? onRunningChanged; // timer started / stopped
   final String doneLabel;
   const ActivityRunnerScreen({
     super.key,
@@ -27,6 +29,7 @@ class ActivityRunnerScreen extends StatefulWidget {
     this.locked = false,
     this.onComplete,
     this.onCancel,
+    this.onRunningChanged,
     this.doneLabel = 'Done',
   });
 
@@ -39,17 +42,18 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
   bool _running = false;
   bool _done = false;
   Timer? _timer;
-  MiniGame? _game; // the mini-game the player picked
+  MiniGame? _game; // the mini-game the player picked (null = show the picker)
 
-  bool get _canStart =>
-      widget.type != WellnessActivityType.miniGame || _game != null;
+  bool get _needsGame =>
+      widget.type == WellnessActivityType.miniGame && _game == null;
 
   void _start() {
-    if (!_canStart) return;
+    if (_needsGame) return;
     setState(() {
       _running = true;
       _remaining = kActivitySeconds;
     });
+    widget.onRunningChanged?.call(true);
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (_remaining <= 1) {
         t.cancel();
@@ -58,6 +62,7 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
           _running = false;
           _done = true;
         });
+        widget.onRunningChanged?.call(false);
         _complete();
       } else {
         setState(() => _remaining--);
@@ -73,6 +78,7 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
 
   void _cancel() {
     _timer?.cancel();
+    widget.onRunningChanged?.call(false);
     if (widget.onCancel != null) {
       widget.onCancel!();
     } else {
@@ -199,8 +205,7 @@ class _ActivityRunnerScreenState extends State<ActivityRunnerScreen> {
               else if (_running)
                 _btn('Cancel', _cancel, secondary: true)
               else
-                _btn(_canStart ? 'Start' : 'Pick a game to start',
-                    _canStart ? _start : null),
+                _btn('Start', _needsGame ? null : _start),
             ]),
           ),
         ),
